@@ -1,0 +1,98 @@
+{
+  "name": "Salla Order Refund WhatsApp Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-order-refund",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "c3fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Salla Order Refund Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  const orderData = payload.data || {};\n  const customer = orderData.customer || {};\n  \n  // Extract customer name\n  const customerName = customer.name || customer.first_name || 'Customer';\n  \n  // Extract order ID\n  const orderId = orderData.id || orderData.reference_id || 'N/A';\n  \n  // Extract phone number and clean it\n  const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';\n  const cleanedPhone = String(rawPhone).replace(/[\\s+]/g, '');\n  \n  // Extract refund amount\n  let refundAmount = '0.00';\n  if (orderData.amount) {\n    refundAmount = typeof orderData.amount === 'object' ? (orderData.amount.amount || '0.00') : orderData.amount;\n  } else if (orderData.total) {\n    refundAmount = typeof orderData.total === 'object' ? (orderData.total.amount || '0.00') : orderData.total;\n  }\n  \n  // Extract currency\n  const currency = (orderData.amount && orderData.amount.currency) || (orderData.total && orderData.total.currency) || 'SAR';\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      customer_name: customerName,\n      phone_number: cleanedPhone,\n      order_id: orderId,\n      refund_amount: `${refundAmount} ${currency}`\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "cf6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Refund Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        370,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone_number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"order_refunded_notification\",\n    \"language\": {\n      \"code\": \"en_US\"\n    },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.customer_name }}\"\n          },\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.order_id }}\"\n          },\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.refund_amount }}\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "6d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Send WhatsApp Refund Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        590,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Order Refund Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Refund Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Refund Data": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Refund Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}

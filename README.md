@@ -27,6 +27,11 @@ This repository contains n8n workflows designed to automate customer notificatio
    - **Sanitization**: Extracts customer's first name, recovery checkout URL, and cleans phone number.
    - **Action**: Sends a WhatsApp template reminder with a direct checkout link and discount incentive.
 
+5. **Salla Order Refund Notification**
+   - **Trigger**: Salla `order.refunded` webhook event.
+   - **Sanitization**: Extracts customer name, order ID, formatted refund amount with currency, and cleans phone number.
+   - **Action**: Sends a WhatsApp confirmation template message confirming the processed refund.
+
 ---
 
 ## Getting Started
@@ -38,6 +43,7 @@ To import any workflow:
    - [salla-whatsapp-order-status.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-order-status.json)
    - [salla-whatsapp-review-request.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-review-request.json)
    - [salla-whatsapp-abandoned-cart.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-abandoned-cart.json)
+   - [salla-whatsapp-refund.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-refund.json)
 2. Open your n8n canvas.
 3. Use the keyboard shortcut `Ctrl + V` (Windows/Linux) or `Cmd + V` (Mac) to paste the workflow directly onto the canvas, or click the **Workflow Menu** (top-right three dots) -> **Import from File** and upload the JSON.
 
@@ -118,14 +124,30 @@ Sends template `order_review_request` with `customer_name` as parameter.
 * **HTTP Method**: `POST`
 * **Path**: `salla-abandoned-cart`
 * **Response Mode**: `onReceived`
+* **Salla Setup**: Subscribe to the event `abandoned.cart` in Salla Partners.
+
+### Node 2: Parse Cart Data Node (Code)
+Extracts customer name, cleans the phone number, and extracts checkout URL.
+
+### Node 3: Send WhatsApp Recovery Message Node (HTTP Request)
+Sends template `cart_recovery_reminder` with `first_name` and `checkout_url` as parameters.
+
+---
+
+## Workflow 5: Salla Order Refund Notification
+
+### Node 1: Salla Order Refund Webhook Node (Webhook)
+* **HTTP Method**: `POST`
+* **Path**: `salla-order-refund`
+* **Response Mode**: `onReceived`
 * **Salla Setup**:
   1. Go to your **Salla Partners Dashboard** -> App Settings.
   2. Navigate to **Webhooks**.
-  3. Subscribe to the event `abandoned.cart`.
+  3. Subscribe to the event `order.refunded`.
   4. Paste the n8n Webhook URL.
 
-### Node 2: Parse Cart Data Node (Code)
-Extracts and sanitizes checkout details:
+### Node 2: Parse Refund Data Node (Code)
+Extracts customer name, order ID, cleaned phone number, and formats the refund amount:
 * **Language**: JavaScript
 * **Code**:
   ```javascript
@@ -134,31 +156,37 @@ Extracts and sanitizes checkout details:
 
   for (const item of items) {
     const payload = item.json.body || item.json;
-    const cartData = payload.data || {};
-    const customer = cartData.customer || {};
+    const orderData = payload.data || {};
+    const customer = orderData.customer || {};
     
     // Extract customer name
-    let firstName = customer.first_name || '';
-    if (!firstName && customer.name) {
-      firstName = customer.name.split(' ')[0];
-    }
-    if (!firstName) {
-      firstName = 'Customer';
-    }
+    const customerName = customer.name || customer.first_name || 'Customer';
+    
+    // Extract order ID
+    const orderId = orderData.id || orderData.reference_id || 'N/A';
     
     // Extract phone number and clean it
     const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';
     const cleanedPhone = String(rawPhone).replace(/[\s+]/g, '');
     
-    // Extract checkout URL
-    const checkoutUrl = cartData.checkout_url || cartData.url || '';
+    // Extract refund amount
+    let refundAmount = '0.00';
+    if (orderData.amount) {
+      refundAmount = typeof orderData.amount === 'object' ? (orderData.amount.amount || '0.00') : orderData.amount;
+    } else if (orderData.total) {
+      refundAmount = typeof orderData.total === 'object' ? (orderData.total.amount || '0.00') : orderData.total;
+    }
+    
+    // Extract currency
+    const currency = (orderData.amount && orderData.amount.currency) || (orderData.total && orderData.total.currency) || 'SAR';
     
     output.push({
       json: {
         original_payload: payload,
-        first_name: firstName,
+        customer_name: customerName,
         phone_number: cleanedPhone,
-        checkout_url: checkoutUrl
+        order_id: orderId,
+        refund_amount: `${refundAmount} ${currency}`
       }
     });
   }
@@ -166,8 +194,8 @@ Extracts and sanitizes checkout details:
   return output;
   ```
 
-### Node 3: Send WhatsApp Recovery Message Node (HTTP Request)
-Sends the recovery reminder using Meta WhatsApp API:
+### Node 3: Send WhatsApp Refund Message Node (HTTP Request)
+Sends the refund processed confirmation using Meta WhatsApp API:
 * **HTTP Method**: `POST`
 * **URL**: `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages`
 * **Headers**: `Authorization: Bearer YOUR_WHATSAPP_ACCESS_TOKEN`
@@ -179,7 +207,7 @@ Sends the recovery reminder using Meta WhatsApp API:
     "to": "{{ $json.phone_number }}",
     "type": "template",
     "template": {
-      "name": "cart_recovery_reminder",
+      "name": "order_refunded_notification",
       "language": {
         "code": "en_US"
       },
@@ -187,15 +215,16 @@ Sends the recovery reminder using Meta WhatsApp API:
         {
           "type": "body",
           "parameters": [
-            { "type": "text", "text": "{{ $json.first_name }}" },
-            { "type": "text", "text": "{{ $json.checkout_url }}" }
+            { "type": "text", "text": "{{ $json.customer_name }}" },
+            { "type": "text", "text": "{{ $json.order_id }}" },
+            { "type": "text", "text": "{{ $json.refund_amount }}" }
           ]
         }
       ]
     }
   }
   ```
-  *(Make sure the template `"cart_recovery_reminder"` is pre-approved in Meta Developer Portal and contains variables for the user name and checkout link)*
+  *(Make sure the template `"order_refunded_notification"` is pre-approved in Meta Developer Portal and contains variables for user name, order ID, and refund amount)*
 
 ---
 
@@ -204,4 +233,5 @@ Sends the recovery reminder using Meta WhatsApp API:
 - `salla-whatsapp-order-status.json`: Webhook-to-WhatsApp order status update notification workflow.
 - `salla-whatsapp-review-request.json`: Webhook-to-WhatsApp 24-hour review request workflow.
 - `salla-whatsapp-abandoned-cart.json`: Webhook-to-WhatsApp abandoned cart recovery workflow.
+- `salla-whatsapp-refund.json`: Webhook-to-WhatsApp order refund notification workflow.
 - `README.md`: Setup and integration guidelines.
