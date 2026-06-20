@@ -1,0 +1,173 @@
+{
+  "name": "Salla Order Status WhatsApp Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-order-status-update",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "c3fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Salla Order Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  const orderData = payload.data || {};\n  const customer = orderData.customer || {};\n  const status = orderData.status || {};\n  \n  // Extract customer name\n  const customerName = customer.name || customer.first_name || 'Customer';\n  \n  // Extract order ID\n  const orderId = orderData.id || orderData.reference_id || 'N/A';\n  \n  // Extract status name\n  const statusName = status.name || 'Updated';\n  \n  // Extract phone number and clean it\n  const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';\n  const cleanedPhone = String(rawPhone).replace(/[\\s+]/g, '');\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      customer_name: customerName,\n      phone_number: cleanedPhone,\n      order_id: orderId,\n      status_name: statusName\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "8f6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        370,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.status_name }}",
+        "rules": {
+          "rules": [
+            {
+              "operation": "equal",
+              "value2": "Shipped"
+            },
+            {
+              "operation": "equal",
+              "value2": "Out for Delivery"
+            }
+          ]
+        }
+      },
+      "id": "4e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Route by Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [
+        590,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone_number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"order_shipped_notification\",\n    \"language\": {\n      \"code\": \"en_US\"\n    },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.customer_name }}\"\n          },\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.order_id }}\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "2d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "WhatsApp Shipped Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        830,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone_number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"order_out_for_delivery_notification\",\n    \"language\": {\n      \"code\": \"en_US\"\n    },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.customer_name }}\"\n          },\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.order_id }}\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "3d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "WhatsApp Out for Delivery Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        830,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Order Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Order Data": {
+      "main": [
+        [
+          {
+            "node": "Route by Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Status": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Shipped Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WhatsApp Out for Delivery Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}
