@@ -1,0 +1,98 @@
+{
+  "name": "Salla Abandoned Cart Recovery WhatsApp Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-abandoned-cart",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "b3fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Salla Abandoned Cart Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  const cartData = payload.data || {};\n  const customer = cartData.customer || {};\n  \n  // Extract customer name\n  let firstName = customer.first_name || '';\n  if (!firstName && customer.name) {\n    firstName = customer.name.split(' ')[0];\n  }\n  if (!firstName) {\n    firstName = 'Customer';\n  }\n  \n  // Extract phone number and clean it\n  const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';\n  const cleanedPhone = String(rawPhone).replace(/[\\s+]/g, '');\n  \n  // Extract checkout URL\n  const checkoutUrl = cartData.checkout_url || cartData.url || '';\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      first_name: firstName,\n      phone_number: cleanedPhone,\n      checkout_url: checkoutUrl\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "af6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Cart Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        370,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone_number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"cart_recovery_reminder\",\n    \"language\": {\n      \"code\": \"en_US\"\n    },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.first_name }}\"\n          },\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.checkout_url }}\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "5d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Send WhatsApp Recovery Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        590,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Abandoned Cart Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Cart Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cart Data": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Recovery Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}

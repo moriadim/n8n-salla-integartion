@@ -22,6 +22,11 @@ This repository contains n8n workflows designed to automate customer notificatio
    - **Sanitization**: Cleans the customer's phone number and extracts their name.
    - **Action**: Sends a WhatsApp template requesting feedback/rating.
 
+4. **Salla Abandoned Cart Recovery**
+   - **Trigger**: Salla `abandoned.cart` webhook event.
+   - **Sanitization**: Extracts customer's first name, recovery checkout URL, and cleans phone number.
+   - **Action**: Sends a WhatsApp template reminder with a direct checkout link and discount incentive.
+
 ---
 
 ## Getting Started
@@ -32,6 +37,7 @@ To import any workflow:
    - [salla-whatsapp-welcome.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-welcome.json)
    - [salla-whatsapp-order-status.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-order-status.json)
    - [salla-whatsapp-review-request.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-review-request.json)
+   - [salla-whatsapp-abandoned-cart.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-abandoned-cart.json)
 2. Open your n8n canvas.
 3. Use the keyboard shortcut `Ctrl + V` (Windows/Linux) or `Cmd + V` (Mac) to paste the workflow directly onto the canvas, or click the **Workflow Menu** (top-right three dots) -> **Import from File** and upload the JSON.
 
@@ -96,9 +102,30 @@ Extracts and sanitizes keys from the payload (first_name, phone_number, order_id
 ### Node 3: Wait 24 Hours Node (Wait)
 * **Amount**: `24`
 * **Unit**: `hours`
-* **Details**: Pauses execution. n8n offloads execution data to its database, ensuring no active memory consumption during the delay.
+* **Details**: Pauses execution. n8n offloads execution data to its database, ensuring no active memory is consumed during the delay.
 
 ### Node 4: Parse Customer Data Node (Code)
+Extracts customer name and cleans the phone number.
+
+### Node 5: Send WhatsApp Review Request Node (HTTP Request)
+Sends template `order_review_request` with `customer_name` as parameter.
+
+---
+
+## Workflow 4: Salla Abandoned Cart Recovery
+
+### Node 1: Salla Abandoned Cart Webhook Node (Webhook)
+* **HTTP Method**: `POST`
+* **Path**: `salla-abandoned-cart`
+* **Response Mode**: `onReceived`
+* **Salla Setup**:
+  1. Go to your **Salla Partners Dashboard** -> App Settings.
+  2. Navigate to **Webhooks**.
+  3. Subscribe to the event `abandoned.cart`.
+  4. Paste the n8n Webhook URL.
+
+### Node 2: Parse Cart Data Node (Code)
+Extracts and sanitizes checkout details:
 * **Language**: JavaScript
 * **Code**:
   ```javascript
@@ -107,21 +134,31 @@ Extracts and sanitizes keys from the payload (first_name, phone_number, order_id
 
   for (const item of items) {
     const payload = item.json.body || item.json;
-    const orderData = payload.data || {};
-    const customer = orderData.customer || {};
+    const cartData = payload.data || {};
+    const customer = cartData.customer || {};
     
     // Extract customer name
-    const customerName = customer.name || customer.first_name || 'Customer';
+    let firstName = customer.first_name || '';
+    if (!firstName && customer.name) {
+      firstName = customer.name.split(' ')[0];
+    }
+    if (!firstName) {
+      firstName = 'Customer';
+    }
     
     // Extract phone number and clean it
     const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';
     const cleanedPhone = String(rawPhone).replace(/[\s+]/g, '');
     
+    // Extract checkout URL
+    const checkoutUrl = cartData.checkout_url || cartData.url || '';
+    
     output.push({
       json: {
         original_payload: payload,
-        customer_name: customerName,
-        phone_number: cleanedPhone
+        first_name: firstName,
+        phone_number: cleanedPhone,
+        checkout_url: checkoutUrl
       }
     });
   }
@@ -129,7 +166,8 @@ Extracts and sanitizes keys from the payload (first_name, phone_number, order_id
   return output;
   ```
 
-### Node 5: Send WhatsApp Review Request Node (HTTP Request)
+### Node 3: Send WhatsApp Recovery Message Node (HTTP Request)
+Sends the recovery reminder using Meta WhatsApp API:
 * **HTTP Method**: `POST`
 * **URL**: `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages`
 * **Headers**: `Authorization: Bearer YOUR_WHATSAPP_ACCESS_TOKEN`
@@ -141,7 +179,7 @@ Extracts and sanitizes keys from the payload (first_name, phone_number, order_id
     "to": "{{ $json.phone_number }}",
     "type": "template",
     "template": {
-      "name": "order_review_request",
+      "name": "cart_recovery_reminder",
       "language": {
         "code": "en_US"
       },
@@ -149,14 +187,15 @@ Extracts and sanitizes keys from the payload (first_name, phone_number, order_id
         {
           "type": "body",
           "parameters": [
-            { "type": "text", "text": "{{ $json.customer_name }}" }
+            { "type": "text", "text": "{{ $json.first_name }}" },
+            { "type": "text", "text": "{{ $json.checkout_url }}" }
           ]
         }
       ]
     }
   }
   ```
-  *(Make sure the template `"order_review_request"` is pre-approved in Meta Developer Portal)*
+  *(Make sure the template `"cart_recovery_reminder"` is pre-approved in Meta Developer Portal and contains variables for the user name and checkout link)*
 
 ---
 
@@ -164,4 +203,5 @@ Extracts and sanitizes keys from the payload (first_name, phone_number, order_id
 - `salla-whatsapp-welcome.json`: Webhook-to-WhatsApp welcome node workflow.
 - `salla-whatsapp-order-status.json`: Webhook-to-WhatsApp order status update notification workflow.
 - `salla-whatsapp-review-request.json`: Webhook-to-WhatsApp 24-hour review request workflow.
+- `salla-whatsapp-abandoned-cart.json`: Webhook-to-WhatsApp abandoned cart recovery workflow.
 - `README.md`: Setup and integration guidelines.
