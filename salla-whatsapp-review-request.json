@@ -1,0 +1,161 @@
+{
+  "name": "Salla Order 24h Review Request WhatsApp Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-order-delivered-review",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a3fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Salla Order Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.data.status.name }}",
+              "value2": "Delivered",
+              "operation": "equal"
+            },
+            {
+              "value1": "={{ $json.body.data.status.name }}",
+              "value2": "تم التوصيل",
+              "operation": "equal"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "5e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Is Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 24,
+        "unit": "hours"
+      },
+      "id": "6e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Wait 24 Hours",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        520,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  const orderData = payload.data || {};\n  const customer = orderData.customer || {};\n  \n  // Extract customer name\n  const customerName = customer.name || customer.first_name || 'Customer';\n  \n  // Extract phone number and clean it\n  const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';\n  const cleanedPhone = String(rawPhone).replace(/[\\s+]/g, '');\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      customer_name: customerName,\n      phone_number: cleanedPhone\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "9f6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Customer Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone_number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"order_review_request\",\n    \"language\": {\n      \"code\": \"en_US\"\n    },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.customer_name }}\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "4d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Send WhatsApp Review Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        960,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Order Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Delivered?": {
+      "main": [
+        [
+          {
+            "node": "Wait 24 Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 24 Hours": {
+      "main": [
+        [
+          {
+            "node": "Parse Customer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Customer Data": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Review Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}
