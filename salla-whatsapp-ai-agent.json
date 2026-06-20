@@ -1,0 +1,174 @@
+{
+  "name": "Salla WhatsApp Support AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incoming-whatsapp",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e3fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Incoming message from customer: {{ $json.body.entry[0].changes[0].value.messages[0].text.body }}",
+        "systemMessage": "You are a helpful customer support agent for a Salla store. You help customers with inquiries about their orders. You have access to a tool to look up order details in a Google Sheet. When someone asks about an order, identify the order number, look it up using the tool, and explain its status to them. Keep your answers concise, professional, and friendly."
+      },
+      "id": "7e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "AI Agent",
+      "type": "n8n-nodes-base.advancedAiAgent",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {}
+      },
+      "id": "8e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "OpenAI Chat Model",
+      "type": "n8n-nodes-base.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        200,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "sessionKey": "={{ $node[\"WhatsApp Webhook\"].json.body.entry[0].changes[0].value.messages[0].from }}",
+        "contextWindowLength": 5
+      },
+      "id": "9e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Window Buffer Memory",
+      "type": "n8n-nodes-base.windowBufferMemory",
+      "typeVersion": 1,
+      "position": [
+        300,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Lookup Salla order details (like order status, products, delivery date) from Google Sheets using the Order Number provided by the customer.",
+        "operation": "readRow"
+      },
+      "id": "0e7ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Google Sheets Tool",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 1,
+      "position": [
+        420,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $node[\\\"WhatsApp Webhook\\\"].json.body.entry[0].changes[0].value.messages[0].from }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.output }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "7d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Send WhatsApp Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        550,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}

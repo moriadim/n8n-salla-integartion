@@ -29,8 +29,15 @@ This repository contains n8n workflows designed to automate customer notificatio
 
 5. **Salla Order Refund Notification**
    - **Trigger**: Salla `order.refunded` webhook event.
-   - **Sanitization**: Extracts customer name, order ID, formatted refund amount with currency, and cleans phone number.
+   - **Sanitization**: Extracts customer name, order ID, formatted refund amount, and cleans phone number.
    - **Action**: Sends a WhatsApp confirmation template message confirming the processed refund.
+
+6. **Salla WhatsApp Support AI Agent**
+   - **Trigger**: WhatsApp incoming customer message webhook.
+   - **LLM Model**: OpenAI Chat Model (`gpt-4o-mini`).
+   - **Memory**: Window Buffer Memory using the customer's WhatsApp ID/phone number as the Session ID to maintain conversation context.
+   - **Tool**: Google Sheets node connected as a Tool, configured to look up and read rows matching order numbers.
+   - **Action**: Sends the AI's generated response directly back to the customer.
 
 ---
 
@@ -44,194 +51,98 @@ To import any workflow:
    - [salla-whatsapp-review-request.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-review-request.json)
    - [salla-whatsapp-abandoned-cart.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-abandoned-cart.json)
    - [salla-whatsapp-refund.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-refund.json)
+   - [salla-whatsapp-ai-agent.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-ai-agent.json)
 2. Open your n8n canvas.
 3. Use the keyboard shortcut `Ctrl + V` (Windows/Linux) or `Cmd + V` (Mac) to paste the workflow directly onto the canvas, or click the **Workflow Menu** (top-right three dots) -> **Import from File** and upload the JSON.
 
 ---
 
 ## Workflow 1: Customer Login Welcome Message
-
-### Node 1: Salla Webhook Node (Webhook)
-* **HTTP Method**: `POST`
-* **Path**: `salla-customer-login`
-* **Response Mode**: `onReceived` (responds immediately with `200 OK`)
-* **Salla Setup**: Subscribe to the `customer.login` event in Salla Partners App settings.
-
-### Node 2: Parse Customer Data Node (Code)
-* **Functionality**: Extracts customer's first name, identifies phone number fields, and strips `+` / spaces.
-
-### Node 3: Send WhatsApp Welcome Node (HTTP Request)
-* **URL**: `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages`
-* **Headers**: `Authorization: Bearer YOUR_WHATSAPP_ACCESS_TOKEN`
-* **Template name**: `welcome_message`
-* **Template Parameter**: `{{ $json.first_name }}`
+*   **Trigger**: Webhook `POST /salla-customer-login`.
+*   **Action**: Sanitizes phone number and sends Meta template `welcome_message`.
 
 ---
 
 ## Workflow 2: Order Status WhatsApp Notification
-
-### Node 1: Salla Order Status Webhook Node (Webhook)
-* **HTTP Method**: `POST`
-* **Path**: `salla-order-status-update`
-* **Response Mode**: `onReceived`
-* **Salla Setup**: Subscribe to the event `order.status.updated` in Salla Partners.
-
-### Node 2: Parse Order Data Node (Code)
-Extracts and sanitizes keys from the payload (first_name, phone_number, order_id, status_name).
-
-### Node 3: Route by Status Node (Switch)
-* **Value 1**: `={{ $json.status_name }}`
-* **Rules**:
-  - **Index 0 (Shipped)**: If `status_name` Equals `Shipped`
-  - **Index 1 (Out for Delivery)**: If `status_name` Equals `Out for Delivery`
-
-### Node 4 & 5: WhatsApp API Nodes (HTTP Request)
-* **Output 0**: Sends template `order_shipped_notification` with `customer_name` and `order_id` as arguments.
-* **Output 1**: Sends template `order_out_for_delivery_notification` with `customer_name` and `order_id` as arguments.
+*   **Trigger**: Webhook `POST /salla-order-status-update`.
+*   **Action**: Sanitizes phone, checks status, and routes to `Shipped` or `Out for Delivery` templates.
 
 ---
 
 ## Workflow 3: Order 24h Review Request
-
-### Node 1: Salla Order Webhook Node (Webhook)
-* **HTTP Method**: `POST`
-* **Path**: `salla-order-delivered-review`
-* **Response Mode**: `onReceived`
-* **Salla Setup**: Subscribe to order update webhooks in Salla Partners.
-
-### Node 2: Is Delivered? Node (IF)
-* **Conditions (Combine: ANY)**:
-  - Check if `{{ $json.body.data.status.name }}` Equals `Delivered`
-  - Check if `{{ $json.body.data.status.name }}` Equals `تم التوصيل`
-* **Workflow branching**: If True, continues to Wait node. If False, stops.
-
-### Node 3: Wait 24 Hours Node (Wait)
-* **Amount**: `24`
-* **Unit**: `hours`
-* **Details**: Pauses execution. n8n offloads execution data to its database, ensuring no active memory is consumed during the delay.
-
-### Node 4: Parse Customer Data Node (Code)
-Extracts customer name and cleans the phone number.
-
-### Node 5: Send WhatsApp Review Request Node (HTTP Request)
-Sends template `order_review_request` with `customer_name` as parameter.
+*   **Trigger**: Webhook `POST /salla-order-delivered-review`.
+*   **Action**: IF status is `Delivered` / `تم التوصيل`, waits 24h, formats details, and sends template `order_review_request`.
 
 ---
 
 ## Workflow 4: Salla Abandoned Cart Recovery
-
-### Node 1: Salla Abandoned Cart Webhook Node (Webhook)
-* **HTTP Method**: `POST`
-* **Path**: `salla-abandoned-cart`
-* **Response Mode**: `onReceived`
-* **Salla Setup**: Subscribe to the event `abandoned.cart` in Salla Partners.
-
-### Node 2: Parse Cart Data Node (Code)
-Extracts customer name, cleans the phone number, and extracts checkout URL.
-
-### Node 3: Send WhatsApp Recovery Message Node (HTTP Request)
-Sends template `cart_recovery_reminder` with `first_name` and `checkout_url` as parameters.
+*   **Trigger**: Webhook `POST /salla-abandoned-cart`.
+*   **Action**: Captures checkout recovery link and sends template `cart_recovery_reminder`.
 
 ---
 
 ## Workflow 5: Salla Order Refund Notification
+*   **Trigger**: Webhook `POST /salla-order-refund`.
+*   **Action**: Captures order ID and refunded amount, and sends template `order_refunded_notification`.
 
-### Node 1: Salla Order Refund Webhook Node (Webhook)
-* **HTTP Method**: `POST`
-* **Path**: `salla-order-refund`
-* **Response Mode**: `onReceived`
-* **Salla Setup**:
-  1. Go to your **Salla Partners Dashboard** -> App Settings.
-  2. Navigate to **Webhooks**.
-  3. Subscribe to the event `order.refunded`.
-  4. Paste the n8n Webhook URL.
+---
 
-### Node 2: Parse Refund Data Node (Code)
-Extracts customer name, order ID, cleaned phone number, and formats the refund amount:
-* **Language**: JavaScript
-* **Code**:
-  ```javascript
-  const items = $input.all();
-  const output = [];
+## Workflow 6: Salla WhatsApp Support AI Agent
 
-  for (const item of items) {
-    const payload = item.json.body || item.json;
-    const orderData = payload.data || {};
-    const customer = orderData.customer || {};
-    
-    // Extract customer name
-    const customerName = customer.name || customer.first_name || 'Customer';
-    
-    // Extract order ID
-    const orderId = orderData.id || orderData.reference_id || 'N/A';
-    
-    // Extract phone number and clean it
-    const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';
-    const cleanedPhone = String(rawPhone).replace(/[\s+]/g, '');
-    
-    // Extract refund amount
-    let refundAmount = '0.00';
-    if (orderData.amount) {
-      refundAmount = typeof orderData.amount === 'object' ? (orderData.amount.amount || '0.00') : orderData.amount;
-    } else if (orderData.total) {
-      refundAmount = typeof orderData.total === 'object' ? (orderData.total.amount || '0.00') : orderData.total;
-    }
-    
-    // Extract currency
-    const currency = (orderData.amount && orderData.amount.currency) || (orderData.total && orderData.total.currency) || 'SAR';
-    
-    output.push({
-      json: {
-        original_payload: payload,
-        customer_name: customerName,
-        phone_number: cleanedPhone,
-        order_id: orderId,
-        refund_amount: `${refundAmount} ${currency}`
+### Node 1: WhatsApp Webhook Node (Webhook)
+*   **HTTP Method**: `POST`
+*   **Path**: `incoming-whatsapp`
+*   **Response Mode**: `onReceived`
+*   **Setup**: Configure Meta WhatsApp Business App Webhook to point to this endpoint for the `messages` event.
+
+### Node 2: AI Agent Node (Advanced AI Agent)
+*   **Prompt Type**: Define
+*   **Input text**: `Incoming message from customer: {{ $json.body.entry[0].changes[0].value.messages[0].text.body }}`
+*   **System Prompt**:
+    ```text
+    You are a helpful customer support agent for a Salla store. You help customers with inquiries about their orders. You have access to a tool to look up order details in a Google Sheet. When someone asks about an order, identify the order number, look it up using the tool, and explain its status to them. Keep your answers concise, professional, and friendly.
+    ```
+
+### Node 3: OpenAI Chat Model (LM Chat OpenAI)
+*   **Model**: `gpt-4o-mini`
+*   **Connection**: Connected to the `ai_languageModel` input of the AI Agent.
+
+### Node 4: Window Buffer Memory (Window Buffer Memory)
+*   **Session Key**: `={{ $node["WhatsApp Webhook"].json.body.entry[0].changes[0].value.messages[0].from }}`  
+    *(Uses the customer's phone number as the unique session key to separate threads)*
+*   **Context Window Length**: 5
+*   **Connection**: Connected to the `ai_memory` input of the AI Agent.
+
+### Node 5: Google Sheets Tool (Google Sheets Tool)
+*   **Operation**: `readRow` (Lookup/Read Row)
+*   **Description**: `Lookup Salla order details (like order status, products, delivery date) from Google Sheets using the Order Number provided by the customer.`
+*   **Connection**: Connected to the `ai_tool` input of the AI Agent.
+
+### Node 6: Send WhatsApp Response Node (HTTP Request)
+*   **HTTP Method**: `POST`
+*   **URL**: `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages`
+*   **Headers**: `Authorization: Bearer YOUR_WHATSAPP_ACCESS_TOKEN`
+*   **JSON Body**:
+    ```json
+    {
+      "messaging_product": "whatsapp",
+      "recipient_type": "individual",
+      "to": "{{ $node[\"WhatsApp Webhook\"].json.body.entry[0].changes[0].value.messages[0].from }}",
+      "type": "text",
+      "text": {
+        "body": "{{ $json.output }}"
       }
-    });
-  }
-
-  return output;
-  ```
-
-### Node 3: Send WhatsApp Refund Message Node (HTTP Request)
-Sends the refund processed confirmation using Meta WhatsApp API:
-* **HTTP Method**: `POST`
-* **URL**: `https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages`
-* **Headers**: `Authorization: Bearer YOUR_WHATSAPP_ACCESS_TOKEN`
-* **JSON Body**:
-  ```json
-  {
-    "messaging_product": "whatsapp",
-    "recipient_type": "individual",
-    "to": "{{ $json.phone_number }}",
-    "type": "template",
-    "template": {
-      "name": "order_refunded_notification",
-      "language": {
-        "code": "en_US"
-      },
-      "components": [
-        {
-          "type": "body",
-          "parameters": [
-            { "type": "text", "text": "{{ $json.customer_name }}" },
-            { "type": "text", "text": "{{ $json.order_id }}" },
-            { "type": "text", "text": "{{ $json.refund_amount }}" }
-          ]
-        }
-      ]
     }
-  }
-  ```
-  *(Make sure the template `"order_refunded_notification"` is pre-approved in Meta Developer Portal and contains variables for user name, order ID, and refund amount)*
+    ```
+    *(Directly returns the AI Agent's string output, `{{ $json.output }}`)*
 
 ---
 
 ## Repository Structure
-- `salla-whatsapp-welcome.json`: Webhook-to-WhatsApp welcome node workflow.
-- `salla-whatsapp-order-status.json`: Webhook-to-WhatsApp order status update notification workflow.
-- `salla-whatsapp-review-request.json`: Webhook-to-WhatsApp 24-hour review request workflow.
-- `salla-whatsapp-abandoned-cart.json`: Webhook-to-WhatsApp abandoned cart recovery workflow.
-- `salla-whatsapp-refund.json`: Webhook-to-WhatsApp order refund notification workflow.
+- `salla-whatsapp-welcome.json`: Webhook welcome node workflow.
+- `salla-whatsapp-order-status.json`: Order status update notification workflow.
+- `salla-whatsapp-review-request.json`: 24-hour review request workflow.
+- `salla-whatsapp-abandoned-cart.json`: Abandoned cart recovery workflow.
+- `salla-whatsapp-refund.json`: Order refund notification workflow.
+- `salla-whatsapp-ai-agent.json`: WhatsApp support AI Agent workflow.
 - `README.md`: Setup and integration guidelines.
