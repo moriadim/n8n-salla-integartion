@@ -1,0 +1,98 @@
+{
+  "name": "Salla to WhatsApp Welcome Message",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-customer-login",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e8a931a7-0df7-4be7-ba84-48f8007a82b9",
+      "name": "Salla Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  // Handle cases where payload might be in a 'body' property or directly at root\n  const payload = item.json.body || item.json;\n  \n  // Access customer data nested in payload.data\n  const customer = payload.data || {};\n  \n  // Extract customer's first name, fallback to a default if unavailable\n  let firstName = customer.first_name || '';\n  if (!firstName && customer.name) {\n    firstName = customer.name.split(' ')[0];\n  }\n  if (!firstName) {\n    firstName = 'Customer';\n  }\n  \n  // Extract raw phone number / mobile\n  const rawPhone = customer.mobile || customer.phone_number || customer.phone || '';\n  \n  // Strip '+' signs, spaces, and any other non-digit characters to format for WhatsApp API\n  const cleanedPhone = String(rawPhone).replace(/[\\s+]/g, '');\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      first_name: firstName,\n      phone_number: cleanedPhone\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "7f6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Customer Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone_number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"welcome_message\",\n    \"language\": {\n      \"code\": \"en_US\"\n    },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"{{ $json.first_name }}\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "1d2ba548-cfae-460d-a78b-dc84007f9c8f",
+      "name": "Send WhatsApp Welcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        690,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Customer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Customer Data": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Welcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}
