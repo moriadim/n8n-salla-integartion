@@ -1,0 +1,146 @@
+{
+  "name": "Amazon Return Tracker Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "amazon-return-notification",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "f3fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Amazon Return Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "postToHeaders": false,
+        "downloadAttachments": false,
+        "options": {}
+      },
+      "id": "0e7ba548-cfae-460d-a78b-dc84007f9c8g",
+      "name": "Amazon Return Email",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  \n  let returnId = 'N/A';\n  let itemName = 'N/A';\n  let status = 'Pending';\n  \n  // Check if input has email content (text, body, subject)\n  const emailText = payload.text || payload.body || '';\n  const emailSubject = payload.subject || '';\n  \n  if (emailText || emailSubject) {\n    // Regex parse email body/subject\n    const returnIdMatch = emailText.match(/(?:Return ID|Order ID|RMA):\\s*([A-Za-z0-9-]+)/i) || \n                          emailSubject.match(/(?:Return ID|Order ID|RMA):\\s*([A-Za-z0-9-]+)/i);\n    if (returnIdMatch) {\n      returnId = returnIdMatch[1];\n    }\n    \n    const itemMatch = emailText.match(/(?:Item Name|Product|Item):\\s*([^\\r\\n]+)/i);\n    if (itemMatch) {\n      itemName = itemMatch[1].trim();\n    }\n    \n    const statusMatch = emailText.match(/(?:Status|Return Status):\\s*([^\\r\\n]+)/i);\n    if (statusMatch) {\n      status = statusMatch[1].trim();\n    }\n  } else {\n    // Direct JSON payload\n    returnId = payload.return_id || payload.returnId || payload.order_id || payload.orderId || 'N/A';\n    itemName = payload.item_name || payload.itemName || payload.product_name || 'N/A';\n    status = payload.status || payload.return_status || 'Processed';\n  }\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      return_id: returnId,\n      item_name: itemName,\n      status: status,\n      logged_at: new Date().toISOString()\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "ff6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Return Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_SPREADSHEET_ID",
+        "sheetName": "Sheet1",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Return ID": "={{ $json.return_id }}",
+            "Item Name": "={{ $json.item_name }}",
+            "Status": "={{ $json.status }}",
+            "Logged At": "={{ $json.logged_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "6d2ba548-cfae-460d-a78b-dc84007f9c8g",
+      "name": "Log Return to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        570,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_ADMIN_CHANNEL_ID",
+        "text": "*New Amazon Return Logged!*\n\n📦 *Return ID:* {{ $json.return_id }}\n🛍️ *Item Name:* {{ $json.item_name }}\n🔄 *Status:* {{ $json.status }}\n📅 *Date:* {{ $json.logged_at }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7d2ba548-cfae-460d-a78b-dc84007f9c8g",
+      "name": "Send Telegram Push Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        790,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Amazon Return Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Return Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Amazon Return Email": {
+      "main": [
+        [
+          {
+            "node": "Parse Return Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Return Data": {
+      "main": [
+        [
+          {
+            "node": "Log Return to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Return to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}
