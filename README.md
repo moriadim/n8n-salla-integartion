@@ -1,155 +1,60 @@
-# n8n Store Notification & Automation Workflows
+# Salla Store & Amazon Return Automations (n8n Workflows)
 
-This repository contains n8n workflows designed to automate customer notifications and tracking logs for Salla store events and Amazon returns.
+Hey there! This repository contains a set of ready-to-use n8n workflows that help automate customer communication (via WhatsApp) and track Amazon return notifications.
 
-## Workflows Included
-
-1. **Salla Customer Login Welcome Message**
-   - **Trigger**: Salla `customer.login` webhook event.
-   - **Action**: Sends a welcome template message (`Welcome [Name]`) via Meta WhatsApp.
-
-2. **Salla Order Status WhatsApp Notification**
-   - **Trigger**: Salla `order.status.updated` webhook event.
-   - **Action**: Routes based on status (`Shipped` / `Out for Delivery`) to send localized WhatsApp templates.
-
-3. **Salla Order 24h Review Request**
-   - **Trigger**: Salla order update webhook.
-   - **Action**: If status is `Delivered` / `تم التوصيل`, pauses execution for 24 hours and sends a rating/review WhatsApp template.
-
-4. **Salla Abandoned Cart Recovery**
-   - **Trigger**: Salla `abandoned.cart` webhook event.
-   - **Action**: Sends a WhatsApp template reminder with a direct checkout link and discount incentive.
-
-5. **Salla Order Refund Notification**
-   - **Trigger**: Salla `order.refunded` webhook event.
-   - **Action**: Extracts refund amount and sends a WhatsApp confirmation template.
-
-6. **Salla WhatsApp Support AI Agent**
-   - **Trigger**: WhatsApp incoming customer message.
-   - **Action**: Employs OpenAI Chat Model (`gpt-4o-mini`), Window Buffer Memory (Session ID based on customer number), and a Google Sheets Tool to answer order-related questions.
-
-7. **Amazon Return Notification Tracker**
-   - **Trigger**: Webhook node (direct JSON payload) or IMAP Email Trigger node (reads email).
-   - **Parsing**: A JavaScript Code node uses regex patterns to extract Return ID, Item Name, and Status from emails, or extracts them directly from JSON fields.
-   - **Logging**: Appends the parsed details to a tracking Google Sheet.
-   - **Notification**: Pushes a Markdown-formatted message to an admin Telegram channel.
+We've designed these to save you time and keep your store running smoothly.
 
 ---
 
-## Getting Started
+## 🚀 How to Use These Workflows
 
-### Import Workflow to n8n
-To import any workflow:
-1. Copy the contents of the respective JSON file:
-   - [salla-whatsapp-welcome.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-welcome.json)
-   - [salla-whatsapp-order-status.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-order-status.json)
-   - [salla-whatsapp-review-request.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-review-request.json)
-   - [salla-whatsapp-abandoned-cart.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-abandoned-cart.json)
-   - [salla-whatsapp-refund.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-refund.json)
-   - [salla-whatsapp-ai-agent.json](file:///c:/Users/isaac/Desktop/salla%20workflows/salla-whatsapp-ai-agent.json)
-   - [amazon-return-tracker.json](file:///c:/Users/isaac/Desktop/salla%20workflows/amazon-return-tracker.json)
-2. Open your n8n canvas.
-3. Paste the workflow (`Ctrl+V` or `Cmd+V`) directly onto the canvas, or click **Workflow Menu** -> **Import from File** and upload the JSON.
+Getting these up and running in your n8n instance is super simple:
+
+1. **Grab the workflow JSON**: Open any of the `.json` files in this repository and copy all of the content.
+2. **Import it into n8n**: Open a blank canvas in n8n, click the three dots in the top-right corner, select **Import from File** (or simply press `Ctrl + V` / `Cmd + V` on your keyboard) and paste the JSON.
+3. **Configure your keys**: Double-click on the API, Google Sheets, or Telegram nodes to add your own API credentials, spreadsheet IDs, or tokens, and activate the workflow!
 
 ---
 
-## Workflow 7: Amazon Return Notification Tracker
+## 📦 What's Inside?
 
-### Node 1: Amazon Return Webhook (Webhook Node)
-*   **HTTP Method**: `POST`
-*   **Path**: `amazon-return-notification`
-*   **Response Mode**: `onReceived` (Acknowledge with `200 OK` immediately)
+Here is a quick overview of the workflows included:
 
-### Node 2: Amazon Return Email (Email Read IMAP Node)
-*   **Function**: Connects to your email inbox (e.g., IMAP, Outlook, or Gmail) to listen for incoming return confirmation emails from Amazon.
+### 1. Salla Welcome Message (WhatsApp)
+Sends a friendly WhatsApp welcome template to customers as soon as they log into your Salla store. It automatically cleans up phone numbers (removing `+` signs and spaces) so they play nice with the Meta API.
+* *File*: `salla-whatsapp-welcome.json`
 
-### Node 3: Parse Return Data (Code Node)
-Uses a JavaScript script to support both structured JSON payloads and email body texts.
-*   **Code**:
-    ```javascript
-    const items = $input.all();
-    const output = [];
+### 2. Salla Order Status Updates (WhatsApp)
+Keeps customers in the loop. When an order status changes (like "Shipped" or "Out for Delivery"), it routes the update and fires off a custom WhatsApp message.
+* *File*: `salla-whatsapp-order-status.json`
 
-    for (const item of items) {
-      const payload = item.json.body || item.json;
-      
-      let returnId = 'N/A';
-      let itemName = 'N/A';
-      let status = 'Pending';
-      
-      const emailText = payload.text || payload.body || '';
-      const emailSubject = payload.subject || '';
-      
-      if (emailText || emailSubject) {
-        // Regex parse email body/subject
-        const returnIdMatch = emailText.match(/(?:Return ID|Order ID|RMA):\s*([A-Za-z0-9-]+)/i) || 
-                              emailSubject.match(/(?:Return ID|Order ID|RMA):\s*([A-Za-z0-9-]+)/i);
-        if (returnIdMatch) {
-          returnId = returnIdMatch[1];
-        }
-        
-        const itemMatch = emailText.match(/(?:Item Name|Product|Item):\s*([^\r\n]+)/i);
-        if (itemMatch) {
-          itemName = itemMatch[1].trim();
-        }
-        
-        const statusMatch = emailText.match(/(?:Status|Return Status):\s*([^\r\n]+)/i);
-        if (statusMatch) {
-          status = statusMatch[1].trim();
-        }
-      } else {
-        // Direct JSON payload
-        returnId = payload.return_id || payload.returnId || payload.order_id || payload.orderId || 'N/A';
-        itemName = payload.item_name || payload.itemName || payload.product_name || 'N/A';
-        status = payload.status || payload.return_status || 'Processed';
-      }
-      
-      output.push({
-        json: {
-          original_payload: payload,
-          return_id: returnId,
-          item_name: itemName,
-          status: status,
-          logged_at: new Date().toISOString()
-        }
-      });
-    }
+### 3. Salla 24h Review Request (WhatsApp)
+Waits exactly 24 hours after an order is marked as delivered (تم التوصيل) and then politely asks the customer for a rating/review on WhatsApp.
+* *File*: `salla-whatsapp-review-request.json`
 
-    return output;
-    ```
+### 4. Salla Abandoned Cart Recovery (WhatsApp)
+Tries to win back lost sales by sending a WhatsApp reminder with a direct checkout link and a discount incentive when a customer leaves their cart behind.
+* *File*: `salla-whatsapp-abandoned-cart.json`
 
-### Node 4: Log Return to Google Sheets (Google Sheets Node)
-*   **Operation**: Append Row
-*   **Spreadsheet ID**: `YOUR_SPREADSHEET_ID`
-*   **Sheet Name**: `Sheet1`
-*   **Column mapping**:
-    *   `Return ID` -> `={{ $json.return_id }}`
-    *   `Item Name` -> `={{ $json.item_name }}`
-    *   `Status` -> `={{ $json.status }}`
-    *   `Logged At` -> `={{ $json.logged_at }}`
+### 5. Salla Refund Confirmation (WhatsApp)
+Sends a quick confirmation WhatsApp text to the customer once a refund has been successfully processed for their order.
+* *File*: `salla-whatsapp-refund.json`
 
-### Node 5: Send Telegram Push Notification (Telegram Node)
-Sends a styled message to your Telegram channel or chat:
-*   **Chat ID**: `YOUR_TELEGRAM_ADMIN_CHANNEL_ID`
-*   **Text**:
-    ```text
-    *New Amazon Return Logged!*
+### 6. WhatsApp AI Customer Support Agent
+An advanced AI assistant powered by OpenAI (`gpt-4o-mini`). It listens to customer inquiries on WhatsApp, automatically remembers the chat context, looks up their order status from a Google Sheet, and texts them back a helpful answer.
+* *File*: `salla-whatsapp-ai-agent.json`
 
-    📦 *Return ID:* {{ $json.return_id }}
-    🛍️ *Item Name:* {{ $json.item_name }}
-    🔄 *Status:* {{ $json.status }}
-    📅 *Date:* {{ $json.logged_at }}
-    ```
-*   **Parse Mode**: `Markdown`
+### 7. Amazon Return Log & Alert Tracker
+Keeps track of Amazon returns. It listens via a webhook or email inbox, parses the Return ID, item name, and status, logs it in a Google Sheets tracker, and sends a quick push notification to your admin Telegram channel.
+* *File*: `amazon-return-tracker.json`
 
 ---
 
-## Repository Structure
-- `salla-whatsapp-welcome.json`
-- `salla-whatsapp-order-status.json`
-- `salla-whatsapp-review-request.json`
-- `salla-whatsapp-abandoned-cart.json`
-- `salla-whatsapp-refund.json`
-- `salla-whatsapp-ai-agent.json`
-- `amazon-return-tracker.json`
-- `README.md`
+## 🛠️ Requirements & Setup
+
+To make full use of these, you'll need:
+- A self-hosted or cloud **n8n** instance.
+- A **Meta Developer App** configured with the WhatsApp Business Cloud API.
+- Credentials for **Google Sheets**, **OpenAI**, or **Telegram** depending on the workflow you choose.
+
+Feel free to customize these workflows to better fit your store's branding or specific needs!
