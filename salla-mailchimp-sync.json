@@ -1,0 +1,135 @@
+{
+  "name": "Salla New Customer to Mailchimp Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-new-customer",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e5fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Salla Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  const customer = payload.data || {};\n  \n  // Extract details\n  const firstName = customer.first_name || '';\n  const lastName = customer.last_name || '';\n  const email = customer.email || '';\n  const rawPhone = customer.mobile || customer.phone || customer.phone_number || '';\n  const cleanedPhone = String(rawPhone).replace(/[\\s+]/g, '');\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      first_name: firstName,\n      last_name: lastName,\n      email: email,\n      phone_number: cleanedPhone\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "ef6511a3-2bf9-450f-90ae-db84007f35b3",
+      "name": "Parse Customer Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.email }}",
+              "value2": "",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "5e7ba548-cfae-460d-a78b-dc84007f9c8g",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "listId": "YOUR_LIST_ID",
+        "email": "={{ $json.email }}",
+        "status": "subscribed",
+        "mergeFields": {
+          "value": [
+            {
+              "name": "FNAME",
+              "value": "={{ $json.first_name }}"
+            },
+            {
+              "name": "LNAME",
+              "value": "={{ $json.last_name }}"
+            },
+            {
+              "name": "PHONE",
+              "value": "={{ $json.phone_number }}"
+            }
+          ]
+        },
+        "tags": [
+          "Salla Customer"
+        ],
+        "options": {}
+      },
+      "id": "7d2ba548-cfae-460d-a78b-dc84007f9c8h",
+      "name": "Add/Update Mailchimp Member",
+      "type": "n8n-nodes-base.mailchimp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Customer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Customer Data": {
+      "main": [
+        [
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Email?": {
+      "main": [
+        [
+          {
+            "node": "Add/Update Mailchimp Member",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}

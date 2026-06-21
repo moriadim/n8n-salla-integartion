@@ -1,6 +1,6 @@
 # Salla Store & Amazon Return Automations (n8n Workflows)
 
-Hey there! This repository contains a set of ready-to-use n8n workflows that help automate customer communication (via WhatsApp), dispatch Telegram alerts, and track Amazon return notifications.
+Hey there! This repository contains a set of ready-to-use n8n workflows that help automate customer communication (via WhatsApp), sync subscribers to Mailchimp, dispatch Telegram alerts, and track Amazon return notifications.
 
 We've designed these to save you time and keep your store running smoothly.
 
@@ -52,6 +52,10 @@ Keeps track of Amazon returns. It listens via a webhook or email inbox, parses t
 Dispatches an urgent low-stock notification to your purchasing manager's Telegram chat as soon as a product's quantity falls below its low threshold in Salla. Includes SKU, remaining quantity, and a link to check the product in your store dashboard.
 * *File*: `salla-telegram-low-stock.json`
 
+### 9. Salla to Mailchimp Customer Sync
+Automatically adds newly registered Salla customers to your Mailchimp audience list. It checks to make sure the customer has an email address (avoiding errors for phone-only signups) and applies a 'Salla Customer' tag for easy segmentation.
+* *File*: `salla-mailchimp-sync.json`
+
 ---
 
 ## 🛠️ Requirements & Setup
@@ -59,6 +63,6 @@ Dispatches an urgent low-stock notification to your purchasing manager's Telegra
 To make full use of these, you'll need:
 - A self-hosted or cloud **n8n** instance.
 - A **Meta Developer App** configured with the WhatsApp Business Cloud API.
-- Credentials for **Google Sheets**, **OpenAI**, or **Telegram** depending on the workflow you choose.
+- Credentials for **Google Sheets**, **OpenAI**, **Mailchimp**, or **Telegram** depending on the workflow you choose.
 
 Feel free to customize these workflows to better fit your store's branding or specific needs!
