@@ -1,6 +1,6 @@
 # Salla Store & Amazon Return Automations (n8n Workflows)
 
-Hey there! This repository contains a set of ready-to-use n8n workflows that help automate customer communication (via WhatsApp) and track Amazon return notifications.
+Hey there! This repository contains a set of ready-to-use n8n workflows that help automate customer communication (via WhatsApp), dispatch Telegram alerts, and track Amazon return notifications.
 
 We've designed these to save you time and keep your store running smoothly.
 
@@ -47,6 +47,10 @@ An advanced AI assistant powered by OpenAI (`gpt-4o-mini`). It listens to custom
 ### 7. Amazon Return Log & Alert Tracker
 Keeps track of Amazon returns. It listens via a webhook or email inbox, parses the Return ID, item name, and status, logs it in a Google Sheets tracker, and sends a quick push notification to your admin Telegram channel.
 * *File*: `amazon-return-tracker.json`
+
+### 8. Salla Low-Stock Telegram Alerts
+Dispatches an urgent low-stock notification to your purchasing manager's Telegram chat as soon as a product's quantity falls below its low threshold in Salla. Includes SKU, remaining quantity, and a link to check the product in your store dashboard.
+* *File*: `salla-telegram-low-stock.json`
 
 ---
 

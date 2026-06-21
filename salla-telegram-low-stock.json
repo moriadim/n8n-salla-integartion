@@ -1,0 +1,84 @@
+{
+  "name": "Salla Low Stock Telegram Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salla-low-stock",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e4fbbf8c-1e9a-4c28-98e6-e9e8007a82b9",
+      "name": "Salla Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const payload = item.json.body || item.json;\n  const productData = payload.data || {};\n  \n  // Extract details\n  const productName = productData.name || 'Unknown Product';\n  const productSku = productData.sku || 'N/A';\n  const quantity = productData.quantity !== undefined ? productData.quantity : 0;\n  const productUrl = productData.url || '';\n  \n  output.push({\n    json: {\n      original_payload: payload,\n      product_name: productName,\n      product_sku: productSku,\n      quantity: quantity,\n      product_url: productUrl\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "ef6511a3-2bf9-450f-90ae-db84007f35b2",
+      "name": "Parse Stock Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        370,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_ADMIN_CHANNEL_ID",
+        "text": "=⚠️ *Low Stock Alert*:\n\n📦 *Product:* {{ $json.product_name }}\n🔢 *SKU:* {{ $json.product_sku }}\n📉 *Remaining Quantity:* {{ $json.quantity }} items!\n🔗 [View Product]({{ $json.product_url }})",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7d2ba548-cfae-460d-a78b-dc84007f9c8g",
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        590,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Salla Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Stock Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Stock Data": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsHelper": {}
+  },
+  "tags": []
+}
